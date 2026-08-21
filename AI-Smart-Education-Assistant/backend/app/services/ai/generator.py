@@ -8,8 +8,8 @@ from app.core.config import settings
 class AIGenerator:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        self.text_model = "llama-3.1-8b-instant"
-        self.vision_model = "llama-3.2-11b-vision-preview"
+        self.text_model = "groq/compound-mini"
+        self.vision_model = "groq/compound"
 
     def _build_context_string(self, chunks: List[Dict]) -> str:
         context_str = ""

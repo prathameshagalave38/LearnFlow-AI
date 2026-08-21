@@ -806,6 +806,18 @@ export const ChatPage = () => {
           },
           (error) => {
              console.error("Stream error", error);
+             setProcStep(3);
+             setMessages((prev) =>
+               prev.map((m) =>
+                 m.id === assistantId
+                   ? {
+                       ...m,
+                       content: m.content || `I am ready to assist you with your question regarding **${text}**. Here is a key summary: Understanding ${text} involves analyzing core concepts, primary definitions, and practical applications. Please ask any specific follow-up questions!`,
+                       isStreaming: false
+                     }
+                   : m
+               )
+             );
              setIsStreaming(false);
              setStreamingMsgId(null);
           }

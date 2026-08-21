@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class SympraAgentParser:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        self.text_model = "llama-3.1-8b-instant"
+        self.text_model = "groq/compound-mini"
 
     async def parse_intent(self, transcript: str, current_page: str) -> Dict[str, Any]:
         system_prompt = """
