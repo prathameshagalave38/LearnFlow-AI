@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 class AIGenerator:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        self.text_model = "groq/compound-mini"
-        self.vision_model = "groq/compound-mini"
+        self.text_model = "openai/gpt-oss-20b"
+        self.vision_model = "openai/gpt-oss-20b"
 
     async def _create_completion(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2048, response_format: dict = None) -> str:
-        models_to_try = ["qwen/qwen3.6-27b", "openai/gpt-oss-20b", "groq/compound-mini", "groq/compound"]
+        models_to_try = ["openai/gpt-oss-20b", "groq/compound", "qwen/qwen3.6-27b", "llama-3.3-70b-versatile", "groq/compound-mini"]
         last_error = None
         for model in models_to_try:
             try:
@@ -32,7 +32,7 @@ class AIGenerator:
                 # Strip out <think>...</think> reasoning blocks if present
                 if "</think>" in content:
                     content = content.split("</think>")[-1]
-                content = re.sub(r'<think>[\s\S]*$', '', content, flags=re.IGNORECASE)
+                content = re.sub(r'<think>[\s\S]*?$', '', content, flags=re.IGNORECASE)
                 content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
                 return content
             except Exception as e:

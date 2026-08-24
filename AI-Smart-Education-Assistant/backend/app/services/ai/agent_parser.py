@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Dict, Any
 from groq import AsyncGroq
 from app.core.config import settings
@@ -9,7 +10,13 @@ logger = logging.getLogger(__name__)
 class SympraAgentParser:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        self.text_model = "groq/compound-mini"
+        self.models_to_try = [
+            "openai/gpt-oss-20b",
+            "groq/compound",
+            "qwen/qwen3.6-27b",
+            "llama-3.3-70b-versatile",
+            "groq/compound-mini"
+        ]
 
     async def parse_intent(self, transcript: str, current_page: str) -> Dict[str, Any]:
         system_prompt = """
@@ -28,8 +35,8 @@ class SympraAgentParser:
 
         Language Instructions:
         - YOU MUST ALWAYS set "detected_language" to "en" and your "speech_reply" MUST be in pure English language, regardless of what language the user speaks.
-        - The user will often speak in Marathi or Hindi mixed with English (e.g. "mala quiz generate kar", "flashcards banav", "mind map dakhava").
-        - Map these precisely! If they say "quiz" -> GENERATE_QUIZ. If they say "flashcards" -> GENERATE_FLASHCARDS. If they say "notes" -> GENERATE_NOTES.
+        - The user will often speak in Marathi or Hindi mixed with English (e.g. "mala quiz generate kar", "flashcards banav", "mind map dakhava", "mala test ghya").
+        - Map these precisely! If they say "quiz" -> GENERATE_QUIZ. If they say "flashcards" -> GENERATE_FLASHCARDS. If they say "notes" -> GENERATE_NOTES. If they say "test" or "test ghya" -> AI_TEACHER_TEST.
         - Pay close attention to their NEWEST command. Do not stick to old tasks if they ask for a new feature.
 
         You MUST output your response STRICTLY as a JSON object matching this schema:
@@ -48,39 +55,51 @@ class SympraAgentParser:
         """
         
         prompt = f"Current Page: {current_page}\nUser Transcript: \"{transcript}\""
-        result_text = ""
+        
+        last_error = None
+        for model in self.models_to_try:
+            result_text = ""
+            try:
+                logger.info(f"Parsing intent with model {model} for transcript: '{transcript}'")
+                response = await self.client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1, 
+                    response_format={"type": "json_object"}
+                )
+                
+                result_text = response.choices[0].message.content or ""
+                # Clean think tags if present
+                if "</think>" in result_text:
+                    result_text = result_text.split("</think>")[-1]
+                result_text = re.sub(r'<think>[\s\S]*?$', '', result_text, flags=re.IGNORECASE)
+                result_text = re.sub(r'<think>[\s\S]*?</think>', '', result_text, flags=re.IGNORECASE).strip()
 
-        try:
-            logger.info(f"Parsing intent for transcript: '{transcript}'")
-            response = await self.client.chat.completions.create(
-                model=self.text_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1, 
-                response_format={"type": "json_object"}
-            )
-            
-            result_text = response.choices[0].message.content
-            logger.info(f"LLM Raw JSON: {result_text}")
-            return json.loads(result_text)
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON Parsing Error: {e} - Raw output: {result_text}")
-            return {
-                "detected_language": "en",
-                "intent": "UNKNOWN",
-                "parameters": {},
-                "speech_reply": "I'm sorry, I couldn't understand that."
-            }
-        except Exception as e:
-            logger.error(f"Error parsing agent intent: {e}")
-            return {
-                "detected_language": "en",
-                "intent": "UNKNOWN",
-                "parameters": {},
-                "speech_reply": "I'm sorry, I encountered an internal error."
-            }
+                # Extract JSON object substring if model output contains preamble
+                json_match = re.search(r'\{[\s\S]*\}', result_text)
+                if json_match:
+                    result_text = json_match.group(0)
+
+                logger.info(f"LLM ({model}) Extracted JSON: {result_text}")
+                return json.loads(result_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON Parsing Error with model {model}: {e} - Raw output: {result_text}")
+                last_error = e
+            except Exception as e:
+                logger.warning(f"Groq API call for model {model} failed: {e}. Trying fallback model...")
+                last_error = e
+
+        logger.error(f"All models failed parsing intent: {last_error}")
+        return {
+            "detected_language": "en",
+            "intent": "UNKNOWN",
+            "parameters": {},
+            "speech_reply": "I'm sorry, I couldn't understand that."
+        }
 
 agent_parser = SympraAgentParser()
+
+
