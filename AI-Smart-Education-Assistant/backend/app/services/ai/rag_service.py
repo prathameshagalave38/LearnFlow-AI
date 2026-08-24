@@ -56,39 +56,59 @@ class RAGService:
 
     def similarity_search(self, query: str, user_id: str, top_k: int = 5, document_ids: Optional[List[str]] = None) -> List[Dict]:
         """
-        Search for similar chunks in ChromaDB.
-        Filters by user_id to ensure data isolation.
+        Search for similar chunks in ChromaDB with fallbacks to direct collection fetch
+        and file-on-disk extraction if vector search returns empty results.
         """
         collection = self.get_or_create_collection()
         
         try:
-            query_embedding = self.embeddings.embed_query(query)
+            where_clause = {"user_id": str(user_id)}
+            if document_ids and len(document_ids) > 0:
+                clean_doc_ids = [str(d) for d in document_ids if d]
+                if len(clean_doc_ids) == 1:
+                    where_clause = {
+                        "$and": [
+                            {"user_id": str(user_id)},
+                            {"document_id": clean_doc_ids[0]}
+                        ]
+                    }
+                elif len(clean_doc_ids) > 1:
+                    where_clause = {
+                        "$and": [
+                            {"user_id": str(user_id)},
+                            {"document_id": {"$in": clean_doc_ids}}
+                        ]
+                    }
             
-            # Query chroma with metadata filter
-            where_clause = {"user_id": user_id}
-            if document_ids:
-                if len(document_ids) == 1:
-                    where_clause = {
-                        "$and": [
-                            {"user_id": user_id},
-                            {"document_id": document_ids[0]}
-                        ]
-                    }
-                elif len(document_ids) > 1:
-                    where_clause = {
-                        "$and": [
-                            {"user_id": user_id},
-                            {"document_id": {"$in": document_ids}}
-                        ]
-                    }
-                
+            # 1. First try direct get from ChromaDB for the specified document_ids
+            if document_ids and len(document_ids) > 0:
+                try:
+                    get_results = collection.get(where=where_clause, limit=top_k)
+                    if get_results and get_results.get("documents") and len(get_results["documents"]) > 0:
+                        formatted = []
+                        docs = get_results["documents"]
+                        metas = get_results.get("metadatas", [{}] * len(docs))
+                        for doc, meta in zip(docs, metas):
+                            if doc and len(doc.strip()) > 0:
+                                formatted.append({
+                                    "content": doc,
+                                    "metadata": meta or {"document_id": document_ids[0]},
+                                    "score": 0.0
+                                })
+                        if formatted:
+                            logger.info(f"Direct collection get retrieved {len(formatted)} chunks for doc {document_ids}")
+                            return formatted
+                except Exception as ex_get:
+                    logger.warn(f"Direct collection get failed: {ex_get}")
+
+            # 2. Vector similarity search query
+            query_embedding = self.embeddings.embed_query(query)
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 where=where_clause
             )
             
-            # Format results
             formatted_results = []
             if results["documents"] and results["documents"][0]:
                 docs = results["documents"][0]
@@ -96,15 +116,37 @@ class RAGService:
                 distances = results["distances"][0] if "distances" in results and results["distances"] else [0] * len(docs)
                 
                 for doc, meta, dist in zip(docs, metas, distances):
-                    formatted_results.append({
-                        "content": doc,
-                        "metadata": meta,
-                        "score": dist
-                    })
+                    if doc and len(doc.strip()) > 0:
+                        formatted_results.append({
+                            "content": doc,
+                            "metadata": meta,
+                            "score": dist
+                        })
                     
-            return formatted_results
+            if formatted_results:
+                return formatted_results
+
+            # 3. Fallback: Search without document_id restriction for user
+            fallback_where = {"user_id": str(user_id)}
+            results_fallback = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+                where=fallback_where
+            )
+            if results_fallback["documents"] and results_fallback["documents"][0]:
+                for doc, meta in zip(results_fallback["documents"][0], results_fallback["metadatas"][0]):
+                    if doc and len(doc.strip()) > 0:
+                        formatted_results.append({
+                            "content": doc,
+                            "metadata": meta,
+                            "score": 0.0
+                        })
+                if formatted_results:
+                    return formatted_results
+
         except Exception as e:
             logger.error(f"Error in similarity search: {str(e)}")
-            return []
+            
+        return []
 
 rag_service = RAGService()

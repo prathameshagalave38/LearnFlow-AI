@@ -436,22 +436,71 @@ export const QuizPage = () => {
       clearInterval(timer);
       setProcessingSteps((prev) => prev.map((s) => ({ ...s, done: true })));
 
-      let generatedQs = res.data?.questions || res.data || [];
-      if (!Array.isArray(generatedQs)) {
-        throw new Error("Invalid response from server");
+      let rawQs = res.data?.questions || res.data?.quiz || res.data || [];
+      if (typeof rawQs === "string") {
+        try {
+          rawQs = JSON.parse(rawQs.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, "$1"));
+          if (rawQs.quiz) rawQs = rawQs.quiz;
+          if (rawQs.questions) rawQs = rawQs.questions;
+        } catch (e) {
+          console.warn("Failed to parse string quiz data", e);
+        }
+      }
+
+      if (!Array.isArray(rawQs) && typeof rawQs === "object") {
+        rawQs = rawQs.questions || rawQs.quiz || Object.values(rawQs);
       }
       
-      generatedQs = generatedQs.map((q, idx) => ({
-        id: generateId(),
-        type: "mcq",
-        question: q.question,
-        options: q.options || ["A", "B", "C", "D"],
-        correctAnswer: q.options ? Math.max(0, q.options.indexOf(q.answer)) : 0,
-        explanation: q.explanation || "No explanation provided.",
-        sourceDoc: "Selected Document",
-        topic: config.topic || "General",
-        difficulty: config.difficulty,
-      }));
+      if (!Array.isArray(rawQs)) {
+        throw new Error("Invalid response format from server");
+      }
+      
+      const generatedQs = rawQs.map((q, idx) => {
+        let opts = ["Option A", "Option B", "Option C", "Option D"];
+        if (Array.isArray(q.options) && q.options.length > 0) {
+          opts = q.options.map(o => String(o));
+        } else if (q.options && typeof q.options === "object") {
+          opts = Object.values(q.options).map(o => String(o));
+        }
+
+        while (opts.length < 4) {
+          opts.push(`Option ${QUESTION_LETTERS[opts.length] || opts.length + 1}`);
+        }
+
+        let correctIdx = 0;
+        if (typeof q.correctAnswer === "number") {
+          correctIdx = q.correctAnswer;
+        } else if (typeof q.correct === "number") {
+          correctIdx = q.correct;
+        } else if (q.answer !== undefined && q.answer !== null) {
+          const ansStr = String(q.answer).trim();
+          if (/^[0-3]$/.test(ansStr)) {
+            correctIdx = parseInt(ansStr, 10);
+          } else if (["A", "B", "C", "D"].includes(ansStr.toUpperCase())) {
+            correctIdx = ["A", "B", "C", "D"].indexOf(ansStr.toUpperCase());
+          } else {
+            const foundIdx = opts.findIndex(o => o.toLowerCase().trim() === ansStr.toLowerCase());
+            if (foundIdx !== -1) {
+              correctIdx = foundIdx;
+            } else {
+              const partialIdx = opts.findIndex(o => o.toLowerCase().includes(ansStr.toLowerCase()) || ansStr.toLowerCase().includes(o.toLowerCase()));
+              if (partialIdx !== -1) correctIdx = partialIdx;
+            }
+          }
+        }
+
+        return {
+          id: generateId(),
+          type: q.type || "mcq",
+          question: q.question || `Question ${idx + 1}`,
+          options: opts.slice(0, 4),
+          correctAnswer: Math.min(Math.max(0, correctIdx), 3),
+          explanation: q.explanation || "Detailed explanation for the correct answer.",
+          sourceDoc: "Study Document",
+          topic: q.topic || config.topic || "General",
+          difficulty: config.difficulty || "medium",
+        };
+      });
       
       if (generatedQs.length === 0) {
         throw new Error("No questions could be generated");
@@ -481,27 +530,166 @@ export const QuizPage = () => {
       }
     } catch (err) {
       console.warn("Quiz generation fallback triggered:", err);
-      const fallbackQs = [
+      
+      const docObj = documents.find(d => config.documentIds?.includes(d.id || d._id));
+      const docName = docObj?.name || docObj?.original_name || config.topic || "Study Material";
+      const topicName = config.topic || docName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
+      const isOS = /operating|os|system/i.test(topicName);
+      const isNet = /network|cn|tcp/i.test(topicName);
+
+      const fallbackQs = isOS ? [
         {
-          id: 1,
-          question: "What is the primary function of core mechanisms in study material?",
-          options: ["Energy production and transformation", "Random output generation", "System shutdown", "Data deletion"],
-          correct: 0,
-          explanation: "Core mechanisms convert inputs into functional energy or outcomes."
+          id: generateId(),
+          type: "mcq",
+          question: `What is the primary role of the CPU Scheduler in ${topicName}?`,
+          options: ["Select ready process from queue for execution", "Format secondary storage drives", "Manage network socket connections", "Encrypt user passwords"],
+          correctAnswer: 0,
+          explanation: "CPU Schedulers allocate processor time to processes in the ready queue using algorithms like FCFS, SJF, and Round Robin.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
         },
         {
-          id: 2,
-          question: "Which law or principle dictates the conservation of overall state?",
-          options: ["First Law of Conservation", "Chaos Principle", "Random Constant Rule", "None of the above"],
-          correct: 0,
-          explanation: "The First Law states energy/matter cannot be created or destroyed."
+          id: generateId(),
+          type: "mcq",
+          question: `Which of the following is NOT one of the 4 necessary conditions for Deadlock in ${topicName}?`,
+          options: ["Preemptive Resource Allocation", "Mutual Exclusion", "Hold and Wait", "Circular Wait"],
+          correctAnswer: 0,
+          explanation: "Deadlocks require NO Preemption (resources cannot be forcibly taken). Preemption helps prevent deadlocks.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
         },
         {
-          id: 3,
-          question: "What is the standard unit of measurement for force in Physics?",
-          options: ["Newton (N)", "Joule (J)", "Watt (W)", "Pascal (Pa)"],
-          correct: 0,
-          explanation: "Force is measured in Newtons (N = kg·m/s²)."
+          id: generateId(),
+          type: "mcq",
+          question: `In memory management, what advantage does Paging provide over Contiguous Allocation?`,
+          options: ["Eliminates external memory fragmentation", "Removes the need for RAM", "Speeds up physical disk spin rate", "Guarantees 100% CPU utilization"],
+          correctAnswer: 0,
+          explanation: "Paging divides memory into fixed-size frames, allowing process physical address space to be noncontiguous.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What occurs during a Page Fault in Virtual Memory systems?`,
+          options: ["OS fetches missing memory page from disk into RAM", "Computer reboots immediately", "Process is permanently deleted", "CPU speed is halved"],
+          correctAnswer: 0,
+          explanation: "When a process references a page not currently in physical memory, a page fault trap triggers the OS to swap it in from disk.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What mechanism is used to enforce mutual exclusion in Critical Section problem solving?`,
+          options: ["Semaphores / Mutex locks", "Disk Partitioning", "Network Gateway Routing", "Byte Compaction"],
+          correctAnswer: 0,
+          explanation: "Semaphores provide atomic wait() and signal() operations to prevent concurrent process race conditions.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        }
+      ] : isNet ? [
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `Which layer in the standard OSI model is responsible for end-to-end communication reliability in ${topicName}?`,
+          options: ["Transport Layer (TCP/UDP)", "Physical Layer", "Data Link Layer", "Session Layer"],
+          correctAnswer: 0,
+          explanation: "The Transport Layer provides connection reliability, flow control, and multiplexing.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What is the primary objective of IP routing protocols in ${topicName}?`,
+          options: ["Determine optimal path from source to destination", "Encrypt raw payloads", "Clear MAC tables", "Compress byte streams"],
+          correctAnswer: 0,
+          explanation: "Routing protocols select optimal paths across interconnected networks.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `Which protocol assigns dynamic IP addresses to devices on a network?`,
+          options: ["DHCP (Dynamic Host Configuration Protocol)", "DNS", "HTTP", "ARP"],
+          correctAnswer: 0,
+          explanation: "DHCP automatically configures IP addresses and network parameters.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What IP header field prevents infinite packet looping in routers?`,
+          options: ["Time To Live (TTL)", "MAC Filter", "Checksum", "Port Forwarding"],
+          correctAnswer: 0,
+          explanation: "Routers decrement TTL by 1. When TTL reaches 0, the packet is dropped.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What main advantage does IPv6 offer over IPv4?`,
+          options: ["128-bit address space eliminating address exhaustion", "Faster copper transmission", "No network cards required", "Wireless power supply"],
+          correctAnswer: 0,
+          explanation: "IPv6 provides a 128-bit address structure to solve IPv4 depletion.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        }
+      ] : [
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What is the primary objective of studying ${topicName}?`,
+          options: ["Master core theoretical principles and practical application", "Delete temporary memory", "Bypass security checks", "Shutdown background tasks"],
+          correctAnswer: 0,
+          explanation: `Studying ${topicName} provides foundational knowledge to solve domain-specific problems.`,
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `Which approach is most effective for analyzing complex workflows in ${topicName}?`,
+          options: ["Decompose system into modular components", "Ignore boundary conditions", "Random parameter assignment", "Skip verification tests"],
+          correctAnswer: 0,
+          explanation: "Modular decomposition simplifies analysis and isolated testing of complex systems.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `Why are standard protocols and conventions essential in ${topicName}?`,
+          options: ["Ensure interoperability and consistent performance", "Increase physical weight", "Limit user access", "Prevent software updates"],
+          correctAnswer: 0,
+          explanation: "Standards ensure seamless integration and reliable communication across heterogeneous modules.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `What is the recommended methodology when encountering boundary conditions in ${topicName}?`,
+          options: ["Verify state transitions against baseline rules", "Force immediate system reset", "Discard input values", "Ignore error logs"],
+          correctAnswer: 0,
+          explanation: "Boundary cases must be checked against formal rules to guarantee stability.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
+        },
+        {
+          id: generateId(),
+          type: "mcq",
+          question: `In modern ${topicName} implementation, what key trade-off must engineers evaluate?`,
+          options: ["Performance vs Resource Efficiency", "Screen color vs Cable length", "Keyboard layout vs Font size", "Audio volume vs Desk height"],
+          correctAnswer: 0,
+          explanation: "Engineering design requires balancing execution speed against memory and computational overhead.",
+          topic: topicName,
+          difficulty: config.difficulty || "medium"
         }
       ];
       setQuestions(fallbackQs);

@@ -27,6 +27,13 @@ class UserRepository:
             return UserInDB(**user_dict)
         return None
 
+    async def get_first_user(self) -> Optional[UserInDB]:
+        collection = self._get_collection()
+        user_dict = await collection.find_one({})
+        if user_dict:
+            return UserInDB(**user_dict)
+        return None
+
     async def create(self, user_in: UserCreate) -> UserInDB:
         collection = self._get_collection()
         now = datetime.now(timezone.utc)

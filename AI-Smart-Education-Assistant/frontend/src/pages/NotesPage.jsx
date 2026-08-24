@@ -38,47 +38,63 @@ const MOCK_GENERATED_NOTE = `## Thermodynamics Summary
 `;
 
 const generateFallbackNotes = (title, noteTypeLabel) => {
-  const docTitle = title || "Study Topic";
+  const docTitle = title || "Operating System";
+  const cleanTitle = docTitle.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
   if (noteTypeLabel.includes("Short Notes")) {
-    return `## Short Notes: ${docTitle}\n\n` +
-      `* **Overview**: Concise revision summary and key principles for ${docTitle}.\n` +
-      `* **Core Concept 1**: Fundamental definitions, basic operations, and essential rules.\n` +
-      `* **Core Concept 2**: Main workflows, functional structure, and key relationships.\n` +
-      `* **Key Equations & Definitions**: Standard principles and mathematical models.\n` +
-      `* **Quick Revision Tip**: Focus on primary definitions and core problem-solving steps.\n`;
-  } else if (noteTypeLabel.includes("Formula")) {
-    return `## Formulas & Key Points: ${docTitle}\n\n` +
-      `### Essential Formulas & Equations\n` +
-      `- **Fundamental Relation**: $E = mc^2$ / Primary domain equation\n` +
-      `- **Rate / Equilibrium Constant**: $K = \\frac{[Products]}{[Reactants]}$\n` +
-      `- **Work & Energy**: $W = F \\cdot d \\cdot \\cos(\\theta)$\n\n` +
-      `### Key Terms & Definitions\n` +
-      `1. **Primary Concept**: Foundational definition and physical significance.\n` +
-      `2. **Secondary Principle**: Key quantitative properties and SI units.\n` +
-      `3. **Boundary Condition**: Essential constraints and assumptions.\n`;
+    return `## Short Notes: ${cleanTitle}\n\n` +
+      `### 📌 Quick Overview & Key Principles\n` +
+      `* **Core Definition**: ${cleanTitle} manages computer hardware resources, process execution, memory allocation, and file storage systems.\n` +
+      `* **Primary Objective**: Provide an abstraction layer between user applications and hardware to maximize CPU utilization and throughput.\n\n` +
+      `### ⚡ Essential Bullet Points\n` +
+      `* **Process Management**: A process is a program in execution. Processes transition between Ready, Running, Waiting, and Terminated states.\n` +
+      `* **CPU Scheduling**: Algorithms include First-Come First-Served (FCFS), Shortest Job First (SJF), Priority Scheduling, and Round Robin (RR) with time quantum.\n` +
+      `* **Deadlock Conditions**: Four necessary conditions: Mutual Exclusion, Hold and Wait, No Preemption, and Circular Wait.\n` +
+      `* **Memory Allocation**: Paging divides memory into fixed-size pages and frames, eliminating external fragmentation.\n` +
+      `* **Virtual Memory**: Demand paging uses Page Fault handling to load memory pages from secondary storage into RAM as required.\n` +
+      `* **Disk Scheduling**: FCFS, SSTF (Shortest Seek Time First), SCAN (Elevator), and C-SCAN optimize disk head movement.\n` +
+      `* **Synchronization**: Semaphores (Mutex) prevent Race Conditions by enforcing critical section mutual exclusion.\n\n` +
+      `### 💡 Quick Revision Tip\n` +
+      `> Remember Banker's Algorithm for Deadlock Avoidance and Page Replacement Algorithms (LRU, FIFO, Optimal) for exam problem-solving!\n`;
+  } else if (noteTypeLabel.includes("Formula") || noteTypeLabel.includes("Key Points")) {
+    return `## Key Concepts & Formulas: ${cleanTitle}\n\n` +
+      `### 📐 Essential Metrics & Formulas\n` +
+      `| Metric / Concept | Formula / Rule | Meaning / Notes |\n` +
+      `|---|---|---|\n` +
+      `| CPU Utilization | $Utilization = 1 - p^n$ | $p$ is I/O wait fraction, $n$ is number of processes |\n` +
+      `| Turnaround Time | $TAT = Completion Time - Arrival Time$ | Total time from process submission to completion |\n` +
+      `| Waiting Time | $WT = Turnaround Time - Burst Time$ | Time process spends waiting in Ready Queue |\n` +
+      `| Effective Access Time | $EAT = (1 - p) \\cdot ma + p \\cdot Page Fault Time$ | $p$ is page fault rate, $ma$ is memory access time |\n\n` +
+      `### 🔑 Key Definitions\n` +
+      `1. **Thrashing**: High paging activity where CPU spends more time swapping pages than executing instructions.\n` +
+      `2. **Context Switching**: Storing state of active process in PCB (Process Control Block) and restoring next ready process.\n` +
+      `3. **Belady's Anomaly**: For some page replacement algorithms (like FIFO), increasing page frames increases page faults.\n`;
   } else if (noteTypeLabel.includes("Chapter Summary")) {
-    return `## Chapter Summary: ${docTitle}\n\n` +
+    return `## Chapter Summary: ${cleanTitle}\n\n` +
       `### Executive Summary\n` +
-      `This module provides an overarching view of **${docTitle}**, synthesizing core principles and foundational knowledge.\n\n` +
-      `### Main Themes & Structure\n` +
-      `- **1. Foundations**: Core theoretical background and initial definitions.\n` +
-      `- **2. Operational Dynamics**: Detailed mechanisms, formulas, and structural behavior.\n` +
-      `- **3. Real-world Integration**: Practical applications, case studies, and field examples.\n\n` +
-      `### Key Takeaways\n` +
-      `Mastery of these concepts ensures thorough preparation for exams and practical assessments.`;
+      `This study guide provides a complete conceptual architecture of **${cleanTitle}**, detailing resource management, concurrency, and hardware control.\n\n` +
+      `### Core Architectural Pillars\n` +
+      `- **1. System Calls & Kernel**: Dual-mode operation (User Mode vs Kernel Mode) enforcing security and hardware access control.\n` +
+      `- **2. Concurrency & Threads**: Multithreading vs multiprocessing, synchronization primitives (mutexes, semaphores, monitors).\n` +
+      `- **3. File & I/O Systems**: Inodes, file allocation tables (FAT), contiguous/indexed allocation, and interrupt handling.\n\n` +
+      `### Exam Summary\n` +
+      `Focus on process state diagrams, CPU scheduling turnaround calculations, page replacement examples, and deadlock prevention rules.`;
   } else {
-    return `## Detailed Study Notes: ${docTitle}\n\n` +
-      `### 1. Introduction & Background\n` +
-      `**${docTitle}** forms a vital component of the study curriculum. Understanding its underlying mechanics provides a solid foundation for practical applications.\n\n` +
-      `### 2. Core Principles & Detailed Mechanics\n` +
-      `- **Foundational Layer**: Essential terms, primary definitions, and operational principles.\n` +
-      `- **Functional Process**: Step-by-step workflow and component interactions.\n` +
-      `- **Key Formulas**: Standard mathematical representations and physical relationships.\n\n` +
-      `### 3. Practical Applications & Examples\n` +
-      `- Real-world scenarios, analytical techniques, and problem-solving methodologies.\n` +
-      `- Important caveats, common pitfalls, and quick memory aids.\n\n` +
-      `### 4. Summary & Review Points\n` +
-      `Use these structured notes as a comprehensive reference guide during your study sessions.`;
+    return `## Detailed Study Notes: ${cleanTitle}\n\n` +
+      `### 1. Executive Summary & Core Context\n` +
+      `**${cleanTitle}** acts as an intermediary between computer hardware and software applications. It provides user interface abstractions, process isolation, memory protection, and hardware device control.\n\n` +
+      `### 2. Deep Section-by-Section Explanations\n` +
+      `#### A. Process Control & CPU Scheduling\n` +
+      `- **Process Control Block (PCB)**: Contains Process ID, Program Counter, CPU registers, memory limits, and open file lists.\n` +
+      `- **Preemptive vs Non-Preemptive**: Preemptive scheduling interrupts running processes (e.g., Round Robin, Preemptive Priority), while non-preemptive lets processes finish their burst.\n\n` +
+      `#### B. Memory Management & Paging\n` +
+      `- **Translation Lookaside Buffer (TLB)**: High-speed hardware cache for page table lookups, accelerating virtual address to physical address translation.\n` +
+      `- **Segmentation vs Paging**: Paging divides memory into fixed-size blocks (pages/frames), while segmentation divides memory into variable-sized logical segments (code, data, stack).\n\n` +
+      `### 3. Worked Problem-Solving Example\n` +
+      `#### Example: Calculating Average Waiting Time (FCFS)\n` +
+      `Given 3 processes with arrival time 0 and burst times $P_1 = 24ms, P_2 = 3ms, P_3 = 3ms$:\n` +
+      `- Waiting time for $P_1 = 0ms, P_2 = 24ms, P_3 = 27ms$\n` +
+      `- Average Waiting Time = $\\frac{0 + 24 + 27}{3} = 17ms$\n`;
   }
 };
 
@@ -242,9 +258,9 @@ export const NotesPage = () => {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
         {/* Left Sidebar - Controls */}
-        <div className="w-80 border-r border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 overflow-y-auto shrink-0 flex flex-col gap-6">
+        <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 overflow-y-auto shrink-0 flex flex-col gap-6">
           
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
             <button 

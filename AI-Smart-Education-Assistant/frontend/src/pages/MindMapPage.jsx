@@ -92,33 +92,38 @@ export const MindMapPage = () => {
       let data = response.data?.mindmap || response.data;
       if (typeof data === "string") {
         try {
-          data = JSON.parse(data.replace(/```json/g, "").replace(/```/g, ""));
+          data = JSON.parse(data.replace(/```json/g, "").replace(/```/g, "").trim());
         } catch (e) {
           // Ignore parse error
         }
       }
       
-      if (data && data.nodes && data.edges) {
+      if (data && data.mindmap) {
+        data = data.mindmap;
+      }
+      
+      if (data && Array.isArray(data.nodes) && data.nodes.length > 0 && Array.isArray(data.edges)) {
         setNodes(data.nodes);
         setEdges(data.edges);
         setIsGenerated(true);
         toast.success("Mind Map generated successfully!");
       } else {
-        throw new Error("Failed to parse mind map data");
+        throw new Error("Failed to parse mind map data structure");
       }
     } catch (err) {
       console.warn("Mindmap generation fallback triggered:", err);
       const docObj = documents.find(d => (d.id || d._id) === activeDoc);
-      const docTitle = docObj?.name || "Study Material";
+      const docTitle = docObj?.name || docObj?.original_name || docObj?.file_name || "Study Material";
+      const cleanTitle = docTitle.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
       
       const fallbackNodes = [
-        { id: "1", position: { x: 400, y: 50 }, data: { label: docTitle }, style: { background: "#3B82F6", color: "white", padding: 12, borderRadius: 10, fontWeight: "bold" } },
-        { id: "2", position: { x: 150, y: 180 }, data: { label: "1. Core Concepts" }, style: { background: "#8B5CF6", color: "white", padding: 10, borderRadius: 8 } },
-        { id: "3", position: { x: 400, y: 180 }, data: { label: "2. Key Dynamics" }, style: { background: "#10B981", color: "white", padding: 10, borderRadius: 8 } },
-        { id: "4", position: { x: 650, y: 180 }, data: { label: "3. Applications" }, style: { background: "#F59E0B", color: "white", padding: 10, borderRadius: 8 } },
-        { id: "5", position: { x: 100, y: 300 }, data: { label: "Definitions & Rules" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
-        { id: "6", position: { x: 400, y: 300 }, data: { label: "Formulas & Equations" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
-        { id: "7", position: { x: 700, y: 300 }, data: { label: "Case Studies" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
+        { id: "1", position: { x: 400, y: 50 }, data: { label: cleanTitle }, style: { background: "#3B82F6", color: "white", padding: 12, borderRadius: 10, fontWeight: "bold" } },
+        { id: "2", position: { x: 150, y: 180 }, data: { label: `1. Core Concepts of ${cleanTitle}` }, style: { background: "#8B5CF6", color: "white", padding: 10, borderRadius: 8 } },
+        { id: "3", position: { x: 400, y: 180 }, data: { label: `2. Principles & Methodologies` }, style: { background: "#10B981", color: "white", padding: 10, borderRadius: 8 } },
+        { id: "4", position: { x: 650, y: 180 }, data: { label: `3. Practical Applications & Review` }, style: { background: "#F59E0B", color: "white", padding: 10, borderRadius: 8 } },
+        { id: "5", position: { x: 100, y: 300 }, data: { label: "Definitions & Key Terms" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
+        { id: "6", position: { x: 400, y: 300 }, data: { label: "Important Formulas & Diagrams" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
+        { id: "7", position: { x: 700, y: 300 }, data: { label: "Summary & Exam Tips" }, style: { background: "#64748B", color: "white", padding: 8, borderRadius: 6 } },
       ];
       const fallbackEdges = [
         { id: "e1-2", source: "1", target: "2", animated: true },

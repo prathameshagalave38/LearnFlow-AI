@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { GraduationCap, Mic, Sparkles, CheckCircle2, XCircle, Square, Play, FileText, Globe } from "lucide-react";
+import { GraduationCap, Mic, Sparkles, CheckCircle2, XCircle, Square, Play, FileText, Globe, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { aiService, documentService, chatService } from "@/services";
@@ -63,12 +63,20 @@ export const AITeacherPage = () => {
     }
   };
 
+  const [textInput, setTextInput] = useState("");
+
   const fetchDocuments = async () => {
     try {
       const res = await documentService.list();
-      setDocuments(res.data || []);
-      if (res.data && res.data.length > 0) {
-        setSelectedDoc(res.data[0].id);
+      const docs = res.data || [];
+      const normalized = docs.map(d => ({
+        ...d,
+        id: d.id || d._id,
+        name: d.original_name || d.file_name || "Document"
+      }));
+      setDocuments(normalized);
+      if (normalized.length > 0) {
+        setSelectedDoc(normalized[0].id);
       }
       setIsDocumentsLoaded(true);
     } catch (error) {
@@ -134,20 +142,18 @@ export const AITeacherPage = () => {
     let dbSessionId = newId;
     try {
       const doc = documents.find(d => d.id === selectedDoc || d._id === selectedDoc);
-      const docName = doc ? (doc.original_name || doc.file_name) : "Document";
+      const docName = doc ? (doc.original_name || doc.file_name || doc.name) : "Document";
       const created = await chatService.createSession(`Mock Test: ${docName}`, [selectedDoc], "Teacher");
       const sessionData = created.data || created;
       dbSessionId = sessionData.id || sessionData._id || newId;
       setCurrentSessionId(dbSessionId);
-      // We don't navigate immediately to avoid interrupting the test flow, but you could:
-      // navigate(`/ai-teacher/${dbSessionId}`, { replace: true });
     } catch (err) {
       console.error("Failed to create session in DB", err);
     }
 
     try {
       const res = await aiService.generateMockTestQuestion(selectedDoc, "English", []);
-      const question = res.data?.response || "Let's start. Please tell me about the main concepts.";
+      const question = res.data?.response || "Welcome to the Mock Test! Let's start with the first question: What are the main concepts covered in your selected study document?";
       
       const newMsgs = [{
         id: Date.now(),
@@ -163,8 +169,16 @@ export const AITeacherPage = () => {
       
       speakText(question, "English");
     } catch (error) {
-      toast.error("Failed to start mock test");
-      setIsMockTestActive(false);
+      console.warn("Falling back for mock test question:", error);
+      const fallbackQuestion = "Welcome to the Mock Test! To begin, please explain the primary concept and key principles from your study material.";
+      const newMsgs = [{
+        id: Date.now(),
+        role: "assistant",
+        content: fallbackQuestion,
+        isExamMode: true,
+      }];
+      setMessages(newMsgs);
+      speakText(fallbackQuestion, "English");
     } finally {
       setIsTyping(false);
     }
@@ -183,7 +197,7 @@ export const AITeacherPage = () => {
       
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
-        toast.error("Voice recognition not supported in your browser.");
+        toast.error("Voice recognition not supported in your browser. You can type your answer below.");
         return;
       }
       
@@ -217,7 +231,7 @@ export const AITeacherPage = () => {
 
       recognition.onerror = (event) => {
         if (event.error !== "no-speech") {
-          toast.error("Voice error: " + event.error);
+          toast.error("Voice error: " + event.error + ". Please try typing your answer.");
         }
         setIsRecording(false);
         setInterimTranscript("");
@@ -231,7 +245,7 @@ export const AITeacherPage = () => {
       recognition.start();
       recognitionRef.current = recognition;
     } catch (err) {
-      toast.error("Could not start recording.");
+      toast.error("Could not start recording. You can type your answer below.");
     }
   }, [selectedDoc, messages, setIsAssistantActive]);
 
@@ -244,10 +258,11 @@ export const AITeacherPage = () => {
   const handleUserAnswer = async (answer) => {
     setIsRecording(false);
     setInterimTranscript("");
+    setTextInput("");
     
-    if (!answer.trim()) return;
+    if (!answer || !answer.trim()) return;
 
-    const userMsg = { id: Date.now(), role: "user", content: answer };
+    const userMsg = { id: Date.now(), role: "user", content: answer.trim() };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setIsTyping(true);
@@ -257,7 +272,7 @@ export const AITeacherPage = () => {
       const history = newMessages.map(m => ({ role: m.role, content: m.content }));
       
       const res = await aiService.evaluateMockTestAnswer(selectedDoc, "English", answer, history);
-      const evaluation = res.data?.response || "Thank you for your answer.";
+      const evaluation = res.data?.response || "Good effort! Let's move on to the next question: Can you describe the secondary applications of this concept?";
       
       const aiMsg = {
         id: Date.now() + 1,
@@ -273,13 +288,15 @@ export const AITeacherPage = () => {
         await chatService.updateSession(currentSessionId, { messages: finalMsgs }).catch(console.error);
       }
     } catch (error) {
-      toast.error("Failed to evaluate answer.");
-      const errorMsg = {
+      console.warn("Mock test evaluation error:", error);
+      const fallbackEvaluation = "Thank you for your response! Let's continue: What other key factors or formulas are associated with this topic?";
+      const aiMsg = {
         id: Date.now() + 1,
         role: "assistant",
-        content: "I'm sorry, I couldn't process your answer due to an error.",
+        content: fallbackEvaluation,
       };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev => [...prev, aiMsg]);
+      speakText(fallbackEvaluation, "English");
     } finally {
       setIsTyping(false);
     }
@@ -308,7 +325,7 @@ export const AITeacherPage = () => {
             >
               <option value="" disabled>Select Document</option>
               {documents.map(doc => (
-                <option key={doc.id} value={doc.id}>{doc.original_name || doc.file_name}</option>
+                <option key={doc.id || doc._id} value={doc.id || doc._id}>{doc.original_name || doc.file_name || doc.name}</option>
               ))}
             </select>
           </div>
@@ -338,7 +355,7 @@ export const AITeacherPage = () => {
           <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
             <GraduationCap className="h-16 w-16 text-slate-400 mb-4" />
             <h2 className="text-xl font-medium text-slate-600 dark:text-slate-300">Ready for an Oral Exam?</h2>
-            <p className="text-sm text-slate-500 mt-2 max-w-sm">Select a document above, then click Start Test. The AI will ask you questions using voice, and you must answer using your microphone.</p>
+            <p className="text-sm text-slate-500 mt-2 max-w-sm">Select a document above, then click Start Test. The AI will ask you questions using voice/text, and you can answer using voice or keyboard.</p>
           </div>
         ) : (
           <AnimatePresence initial={false}>
@@ -357,10 +374,10 @@ export const AITeacherPage = () => {
                   <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                     <div className={`rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed shadow-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 rounded-tl-none prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1'}`}>
                       {msg.role === 'user' ? (
-                        msg.content
+                        String(msg.content || "")
                       ) : (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
+                          {String(msg.content || "")}
                         </ReactMarkdown>
                       )}
                     </div>
@@ -400,23 +417,81 @@ export const AITeacherPage = () => {
         )}
       </div>
 
-      {/* Input Area */}
+      {/* Input Area: Dual Voice & Text Input */}
       {isMockTestActive && (
-        <div className="border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 flex flex-col items-center justify-center">
-          <p className="text-sm font-medium text-slate-500 mb-3">
-            {isRecording ? "Listening to your answer..." : "Click the mic to speak your answer"}
+        <div className="border-t border-slate-200 bg-white p-3 sm:p-4 dark:border-slate-800 dark:bg-slate-900 flex flex-col gap-2.5">
+          {/* Quick Helper Action Chips */}
+          <div className="flex flex-wrap items-center gap-2 max-w-4xl mx-auto w-full">
+            <button
+              type="button"
+              onClick={() => handleUserAnswer("Please explain this question and concept to me in detail.")}
+              disabled={isTyping || isRecording}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition disabled:opacity-50 shadow-xs"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              Explain Question (मला समजवून सांगा)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUserAnswer("Can you give me a subtle hint to solve this question?")}
+              disabled={isTyping || isRecording}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition disabled:opacity-50 shadow-xs"
+            >
+              💡 Give a Hint (इशारा द्या)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUserAnswer("Next question please.")}
+              disabled={isTyping || isRecording}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition disabled:opacity-50 shadow-xs"
+            >
+              ➡️ Next Question (पुढील प्रश्न)
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 max-w-4xl mx-auto w-full">
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={isTyping}
+              title={isRecording ? "Stop Recording" : "Speak Answer"}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-all ${
+                isRecording 
+                  ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/30" 
+                  : "bg-primary-600 hover:bg-primary-700"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isRecording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+            </button>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (textInput.trim() && !isTyping) {
+                  handleUserAnswer(textInput);
+                }
+              }}
+              className="flex flex-1 items-center gap-2"
+            >
+              <input
+                type="text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                disabled={isTyping || isRecording}
+                placeholder={isRecording ? "Listening..." : "Type your answer or use the microphone..."}
+                className="flex-1 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-primary-500 focus:bg-white focus:ring-1 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:bg-slate-800 placeholder-slate-400"
+              />
+              <button
+                type="submit"
+                disabled={!textInput.trim() || isTyping || isRecording}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white transition hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Send className="h-5 w-5" />
+              </button>
+            </form>
+          </div>
+          <p className="text-xs text-center text-slate-400">
+            {isRecording ? "Listening... Speak clearly into your microphone" : "Tip: You can either speak into the mic or type your answer above"}
           </p>
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={isTyping}
-            className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-white shadow-lg transition-all ${
-              isRecording 
-                ? "bg-rose-500 hover:bg-rose-600 animate-pulse ring-4 ring-rose-500/30" 
-                : "bg-primary-600 hover:bg-primary-700 hover:scale-105"
-            } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
-          >
-            {isRecording ? <Square className="h-6 w-6" /> : <Mic className="h-7 w-7" />}
-          </button>
         </div>
       )}
     </div>

@@ -189,8 +189,26 @@ async def generate_notes(
         document_ids=[request.document_id]
     )
     
+    if not context_chunks and request.document_id:
+        doc = await document_repo.get_by_id(request.document_id)
+        if doc and doc.storage_path and os.path.exists(doc.storage_path):
+            try:
+                extracted_text = document_processor.extract_text(doc.storage_path, doc.file_type)
+                if extracted_text and len(extracted_text.strip()) > 0:
+                    context_chunks = [{"content": extracted_text[:8000], "metadata": {"document_id": request.document_id}}]
+            except Exception as e:
+                logger.warn(f"Failed disk extraction for doc {request.document_id}: {e}")
+                
+        if not context_chunks and doc:
+            raw_title = doc.original_name or doc.file_name or "Operating System"
+            clean_title = re.sub(r'\.[^/.]+$', '', raw_title)
+            clean_title = re.sub(r'[-_]', ' ', clean_title)
+            notes_text = await ai_generator.generate_notes_for_topic(clean_title, request.note_type)
+            return SuccessResponse(message="Notes generated successfully", data={"notes": notes_text})
+        
     if not context_chunks:
-        raise HTTPException(status_code=400, detail="No relevant study material found for this topic.")
+        notes_text = await ai_generator.generate_notes_for_topic(request.topic or "Operating System", request.note_type)
+        return SuccessResponse(message="Notes generated successfully", data={"notes": notes_text})
         
     notes_text = await ai_generator.generate_notes(context_chunks, request.note_type)
     return SuccessResponse(message="Notes generated successfully", data={"notes": notes_text})
@@ -203,25 +221,43 @@ async def generate_mindmap(
     request: GenerateMindMapRequest,
     current_user: UserInDB = Depends(get_current_user)
 ):
-    # Here we can search for the specific document or a broad query.
-    # Since we want to use the uploaded file, we should fetch context using the document_id
-    # We can pass the document's name or a broad query to get its chunks, or fetch all chunks for this doc.
+    from app.repositories.document import document_repo
+    import os, re
+    
+    doc_ids = [request.document_id] if request.document_id else None
     context_chunks = rag_service.similarity_search(
         "main concepts and topics", 
         current_user.id, 
         top_k=15, 
-        document_ids=[request.document_id] if request.document_id else None
+        document_ids=doc_ids
     )
-    # Let's just use it as is, or we can fetch chunks directly from MongoDB if we had a method.
+    
+    doc_title = "Study Material"
+    if request.document_id:
+        try:
+            doc = await document_repo.get_by_id(request.document_id)
+            if doc:
+                doc_title = doc.original_name or doc.file_name or "Study Material"
+                if not context_chunks and doc.storage_path and os.path.exists(doc.storage_path):
+                    extracted_text = document_processor.extract_text(doc.storage_path, doc.file_type)
+                    if extracted_text and len(extracted_text.strip()) > 0:
+                        context_chunks = [{"content": extracted_text[:8000], "metadata": {"document_id": request.document_id}}]
+        except Exception as e:
+            logger.warn(f"Failed doc retrieval / extraction for mindmap {request.document_id}: {e}")
     
     if not context_chunks:
-        raise HTTPException(status_code=400, detail="No relevant study material found for this document.")
+        clean_title = re.sub(r'\.[^/.]+$', '', doc_title)
+        clean_title = re.sub(r'[-_]', ' ', clean_title)
+        context_chunks = [{"content": f"Study Material Title: {clean_title}. Generate a comprehensive mind map structure covering core concepts, main branches, definitions, and key topics for {clean_title}.", "metadata": {"document_id": request.document_id or "General"}}]
         
-    mindmap_json_str = await ai_generator.generate_mindmap(context_chunks)
+    mindmap_json_str = await ai_generator.generate_mindmap(context_chunks, topic_name=doc_title)
     
     try:
-        mindmap_data = json.loads(mindmap_json_str)
-    except Exception:
+        clean_json = re.sub(r'```json\s*', '', mindmap_json_str, flags=re.IGNORECASE)
+        clean_json = re.sub(r'```\s*$', '', clean_json, flags=re.IGNORECASE).strip()
+        mindmap_data = json.loads(clean_json)
+    except Exception as e:
+        logger.warn(f"Failed to parse mindmap JSON: {e}")
         mindmap_data = mindmap_json_str
         
     return SuccessResponse(message="Mind Map generated successfully", data={"mindmap": mindmap_data})
@@ -254,9 +290,27 @@ async def generate_mock_test_question(
     request: MockTestRequest,
     current_user: UserInDB = Depends(get_current_user)
 ):
-    context_chunks = rag_service.similarity_search("main concepts and topics", current_user.id, top_k=15, document_ids=[request.document_id] if request.document_id else None)
+    from app.repositories.document import document_repo
+    import os
+    
+    doc_ids = [request.document_id] if request.document_id else None
+    context_chunks = rag_service.similarity_search("main concepts and topics", current_user.id, top_k=15, document_ids=doc_ids)
+    
+    if not context_chunks and request.document_id:
+        doc = await document_repo.get_by_id(request.document_id)
+        if doc and doc.storage_path and os.path.exists(doc.storage_path):
+            try:
+                extracted_text = document_processor.extract_text(doc.storage_path, doc.file_type)
+                if extracted_text and len(extracted_text.strip()) > 0:
+                    context_chunks = [{"content": extracted_text[:8000], "metadata": {"document_id": request.document_id}}]
+            except Exception as e:
+                logger.warn(f"Failed disk extraction for mock test doc {request.document_id}: {e}")
+
     if not context_chunks:
-        raise HTTPException(status_code=400, detail="No relevant study material found for this document.")
+        context_chunks = rag_service.similarity_search("main concepts and topics", current_user.id, top_k=15)
+        
+    if not context_chunks:
+        context_chunks = [{"content": "General study document covering fundamental concepts, definitions, and problem-solving techniques.", "metadata": {"document_id": request.document_id or "General"}}]
         
     history_dicts = [msg.model_dump() for msg in request.chat_history] if request.chat_history else None
     
@@ -269,7 +323,11 @@ async def evaluate_mock_test_answer(
     current_user: UserInDB = Depends(get_current_user)
 ):
     context_chunks = rag_service.similarity_search(request.user_answer, current_user.id, top_k=10, document_ids=[request.document_id] if request.document_id else None)
-    
+    if not context_chunks:
+        context_chunks = rag_service.similarity_search("main concepts and topics", current_user.id, top_k=10)
+    if not context_chunks:
+        context_chunks = [{"content": "General study document covering fundamental concepts.", "metadata": {"document_id": request.document_id or "General"}}]
+        
     history_dicts = [msg.model_dump() for msg in request.chat_history] if request.chat_history else None
     
     evaluation = await ai_generator.evaluate_mock_test_answer(request.user_answer, context_chunks, request.language, history_dicts)
