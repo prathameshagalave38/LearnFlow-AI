@@ -23,8 +23,8 @@ An intelligent, AI-powered study companion designed to transform the way student
 | Mind Map Generation | Flashcards & Quizzes |
 | :---: | :---: |
 | <img width="1918" height="933" alt="mind map" src="https://github.com/user-attachments/assets/486c4151-af27-4e47-af3b-f2cc25131e0a" />
- <br> | <img width="1918" height="923" alt="notes ganeration" src="https://github.com/user-attachments/assets/7c7559e4-1a04-48b8-8976-e953b88e1ca5" />
- <br>   |
+|  <br>   <img width="1918" height="923" alt="notes ganeration" src="https://github.com/user-attachments/assets/7c7559e4-1a04-48b8-8976-e953b88e1ca5" />
+|
 
 ## 🛠️ Tech Stack
 **Frontend:**
