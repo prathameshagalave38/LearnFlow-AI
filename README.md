@@ -17,8 +17,7 @@ An intelligent, AI-powered study companion designed to transform the way student
 
 | Dashboard | AI Chat |
 | :---: | :---: |
-| ![Dashboard Placeholder]( />
-) <br> <img width="1918" height="928" alt="learnflow 1" src="https://github.com/user-attachments/assets/7941cedd-a5ce-48d6-8a0d-004a49bf9118" > | ! <br> <img width="1916" height="932" alt="ai chat" src="https://github.com/user-attachments/assets/5e9c0cfa-c8f5-421a-86c1-0787fae42ac5" />
+|  <br> <img width="1918" height="928" alt="learnflow 1" src="https://github.com/user-attachments/assets/7941cedd-a5ce-48d6-8a0d-004a49bf9118" > | <br> <img width="1916" height="932" alt="ai chat" src="https://github.com/user-attachments/assets/5e9c0cfa-c8f5-421a-86c1-0787fae42ac5" />
 |
 
 | Mind Map Generation | Flashcards & Quizzes |
