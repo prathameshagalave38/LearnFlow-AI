@@ -17,7 +17,8 @@ An intelligent, AI-powered study companion designed to transform the way student
 
 | Dashboard | AI Chat |
 | :---: | :---: |
-| ![Dashboard Placeholder](assets/dashboard.png) <br> *(Replace with your dashboard image)* | ![Chat Placeholder](assets/chat.png) <br> *(Replace with your chat image)* |
+| ![Dashboard Placeholder](<img width="1918" height="928" alt="learnflow 1" src="https://github.com/user-attachments/assets/7941cedd-a5ce-48d6-8a0d-004a49bf9118" />
+) <br> *(Replace with your dashboard image)* | ![Chat Placeholder](assets/chat.png) <br> *(Replace with your chat image)* |
 
 | Mind Map Generation | Flashcards & Quizzes |
 | :---: | :---: |
